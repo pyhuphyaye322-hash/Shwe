@@ -463,5 +463,5 @@ def generate_scenes(
         "provider": provider if mode == "ai" else "offline",
         "mode": mode,
         "notes": notes,
-  }
-  
+                         }
+                                        
