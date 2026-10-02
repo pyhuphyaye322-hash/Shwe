@@ -1,0 +1,13 @@
+# Shwe Khit AI Studio / Recap Voice Pro — Python dependencies
+streamlit>=1.36.0
+youtube-transcript-api>=0.6.2
+google-generativeai>=0.7.2
+openai>=1.30.0
+gTTS>=2.5.1
+requests>=2.31.0
+pydub>=0.25.1
+
+# High quality Myanmar neural voices (my-MM-ThihaNeural / my-MM-NilarNeural).
+# Optional but strongly recommended — the app falls back to gTTS automatically.
+edge-tts>=6.1.10
+aiohttp>=3.9.5
