@@ -22,6 +22,7 @@ same structure regardless of provider::
 from __future__ import annotations
 
 import re
+import threading
 from typing import Any, Callable, Dict, List, Optional
 
 # Matches:  S1:  |  S 1 :  |  S1 -  |  S1။  |  Scene 1:  |  ဇာတ်ကွက် 1:
@@ -38,6 +39,26 @@ SENTENCE_SPLIT_RE = re.compile(r"(?<=[။!?\.])\s+")
 
 class AIError(Exception):
     """Raised when scene generation fails for every configured provider."""
+
+
+def _run_with_timeout(func: Callable[[], Any], timeout: float = 25.0) -> Any:
+    """Run a provider ping with a hard UI-facing timeout."""
+    result: Dict[str, Any] = {}
+
+    def worker() -> None:
+        try:
+            result["value"] = func()
+        except BaseException as exc:  # noqa: BLE001 - forward provider errors
+            result["error"] = exc
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    thread.join(timeout=timeout)
+    if thread.is_alive():
+        raise AIError(f"AI ချိတ်ဆက်မှု အချိန်ကျော်လွန်သွားပါသည် ({int(timeout)} စက္ကန့်)။ Network နှင့် API Key ကို စစ်ပါ။")
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
 
 
 # --------------------------------------------------------------------------- #
@@ -212,7 +233,12 @@ def offline_scenes(transcript: str, max_chars: int = 220) -> List[Dict[str, Any]
 # --------------------------------------------------------------------------- #
 
 def _gemini_generate(prompt: str, config: Dict[str, Any]) -> str:
-    """Call the Gemini API through ``google-generativeai``."""
+    """Call Gemini, preferring the current ``google-genai`` SDK.
+
+    Google AI Studio is transitioning new keys to ``AQ...`` authorization
+    keys. The current SDK is the supported path for those keys; the older
+    ``google-generativeai`` package remains only as a compatibility fallback.
+    """
     ai_cfg = config.get("ai", {})
     api_key = (ai_cfg.get("gemini_api_key") or "").strip()
     if not api_key:
@@ -223,12 +249,20 @@ def _gemini_generate(prompt: str, config: Dict[str, Any]) -> str:
     max_tokens = int(ai_cfg.get("max_output_tokens", 8192))
 
     try:
-        import google.generativeai as genai
+        from google import genai  # type: ignore
     except ImportError:
+        genai = None
+
+    if genai is not None:
         return _gemini_generate_new_sdk(prompt, api_key, model_name, temperature, max_tokens)
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(
+    try:
+        import google.generativeai as legacy_genai
+    except ImportError:
+        raise AIError("Gemini SDK မထည့်သွင်းရသေးပါ — pip install google-genai")
+
+    legacy_genai.configure(api_key=api_key)
+    model = legacy_genai.GenerativeModel(
         model_name,
         generation_config={"temperature": temperature, "max_output_tokens": max_tokens},
     )
@@ -343,9 +377,9 @@ def test_connection(config: Dict[str, Any]) -> Dict[str, Any]:
     prompt = "Reply with exactly: OK"
     try:
         if provider == "openai":
-            _openai_generate(prompt, config)
+            _run_with_timeout(lambda: _openai_generate(prompt, config))
         else:
-            _gemini_generate(prompt, config)
+            _run_with_timeout(lambda: _gemini_generate(prompt, config))
         return {"ok": True, "message": f"{provider.upper()} ချိတ်ဆက်မှု အောင်မြင်ပါသည်။"}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "message": str(exc)}
@@ -429,4 +463,5 @@ def generate_scenes(
         "provider": provider if mode == "ai" else "offline",
         "mode": mode,
         "notes": notes,
-    }
+  }
+  
