@@ -230,6 +230,19 @@ def init_state() -> None:
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
+    # Reuse a transcript.txt left by a previous run or uploaded with the app.
+    # This is useful when a YouTube video has captions disabled.
+    if not st.session_state.get("transcript"):
+        saved_path = config_service.ensure_dirs(st.session_state["config"])["transcript_path"]
+        saved_text = transcript_service.load_transcript(saved_path)
+        if saved_text:
+            st.session_state["transcript"] = saved_text
+            st.session_state["transcript_meta"] = {
+                "language": "saved file",
+                "saved_to": str(saved_path),
+                "chars": len(saved_text),
+            }
+
 
 def flash(kind: str, message: str) -> None:
     """Store a one-shot notification shown on the next render."""
@@ -450,9 +463,7 @@ def render_sidebar() -> dict:
             st.markdown(
                 f'<div class="sk-status"><span class="sk-dot {css_class}"></span>{label}: <b>{text}</b>{extra}</div>',
                 unsafe_allow_html=True,
-            )
-
-        st.markdown('<div class="sk-divider"></div>', unsafe_allow_html=True)
+           st.markdown('<div class="sk-divider"></div>', unsafe_allow_html=True)
 
         col_save, col_reset = st.columns(2)
         if col_save.button("💾 သိမ်းဆည်းရန်", key="sb_save", use_container_width=True, type="primary"):
@@ -524,8 +535,7 @@ def render_step1(cfg: dict, runtime_paths: dict) -> None:
             st.session_state.pop("scene_editor", None)
             flash("info", "🧹 စာသားနှင့် ဇာတ်ကွက်များကို ရှင်းလင်းပြီးပါပြီ။")
             st.rerun()
-
-        # ---------------- transcript extraction ---------------- #
+       # ---------------- transcript extraction ---------------- #
         if extract_clicked:
             if manual_mode or not youtube_url.strip():
                 flash("warning", "⚠️ လင့်ခ် ထည့်သွင်းပါ (သို့) စာသားကို ကိုယ်တိုင် ကူးထည့်ပါ။")
@@ -562,6 +572,21 @@ def render_step1(cfg: dict, runtime_paths: dict) -> None:
                         flash("error", f"❌ မမျှော်လင့်သော ချို့ယွင်းချက် — {exc}")
                 st.rerun()
 
+        if st.button("📂 သိမ်းထားသော transcript.txt မှ စာသားဖတ်ရန်", key="btn_load_saved_transcript", use_container_width=True):
+            saved_text = transcript_service.load_transcript(transcript_path)
+            if saved_text:
+                st.session_state["transcript"] = saved_text
+                st.session_state["transcript_meta"] = {
+                    "language": "saved file",
+                    "saved_to": str(transcript_path),
+                    "chars": len(saved_text),
+                }
+                st.session_state.pop("scene_editor", None)
+                flash("success", f"✅ transcript.txt မှ စာသား {len(saved_text):,} စာလုံး ဖတ်ယူပြီးပါပြီ။")
+            else:
+                flash("warning", "⚠️ transcript.txt မတွေ့ပါ (သို့) စာသားအလွတ်ဖြစ်နေပါသည်။")
+            st.rerun()
+
         # ---------------- manual / uploaded transcript ---------------- #
         if manual_mode:
             uploaded = st.file_uploader(
@@ -589,6 +614,20 @@ def render_step1(cfg: dict, runtime_paths: dict) -> None:
                     flash("warning", "⚠️ စာသား မတွေ့ပါ။")
                 st.rerun()
 
+        st.markdown("**📝 AI Prompt / ကိုယ်ပိုင်ညွှန်ကြားချက်**")
+        st.caption("transcript.txt ထဲရှိစာသားကို ဘယ်လိုပြန်ရေး၊ ဘယ်လိုခွဲ၊ ဘယ်လိုအသံဖတ်စာသားပုံစံလုပ်မည်ကို ဒီနေရာတွင် ရေးပါ။ Gemini mode တွင်သာ အသုံးပြုပါမည်။")
+        custom_prompt = st.text_area(
+            "သင့် Prompt",
+            key="custom_scene_prompt",
+            height=120,
+            placeholder=(
+                "ဥပမာ — မြန်မာစကားပြောသံ သဘာဝကျအောင် ပြန်ရေးပါ။ "
+                "ဇာတ်ကွက်တစ်ခုလျှင် ၂ ကြောင်းထက်မပိုစေဘဲ suspense ရှိအောင် ရေးပါ။ "
+                "S1, S2, S3 ပုံစံဖြင့်သာ ထုတ်ပေးပါ။"
+            ),
+            help="မူရင်း system prompt ကို မဖျက်ဘဲ သင့်ညွှန်ကြားချက်ကို ထပ်ပေါင်းပေးပါမည်။",
+        )
+
         # ---------------- AI scene generation ---------------- #
         if ai_clicked:
             transcript = st.session_state.get("transcript", "").strip()
@@ -599,7 +638,10 @@ def render_step1(cfg: dict, runtime_paths: dict) -> None:
                 with st.spinner("🤖 AI ဖြင့် ဇာတ်ကွက်များ ဖန်တီးနေသည်..."):
                     try:
                         result = ai_service.generate_scenes(
-                            transcript, cfg, progress=lambda msg: progress_placeholder.info(msg)
+                            transcript,
+                            cfg,
+                            progress=lambda msg: progress_placeholder.info(msg),
+                            extra_instruction=custom_prompt,
                         )
                         st.session_state["scenes"] = result["scenes"]
                         st.session_state["scenes_raw"] = result["raw"]
@@ -608,8 +650,8 @@ def render_step1(cfg: dict, runtime_paths: dict) -> None:
                             "mode": result["mode"],
                             "notes": result["notes"],
                             "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        }
-                        st.session_state.pop("scene_editor", None)
+           }
+                       st.session_state.pop("scene_editor", None)
                         progress_placeholder.empty()
                         if result["mode"] == "offline":
                             flash("warning", f"⚠️ {result['notes']}")
@@ -791,9 +833,7 @@ def render_step2(cfg: dict, runtime_paths: dict) -> None:
             )
 
         render_flash()
-
-
-# --------------------------------------------------------------------------- #
+       # --------------------------------------------------------------------------- #
 # Step 3 — sequential audio generation with a strict confirmation gate
 # --------------------------------------------------------------------------- #
 
@@ -976,3 +1016,4 @@ try:
 except config_service.ConfigError as exc:  # configuration problems are fatal but friendly
     st.error(f"⚙️ ဆက်တင် ဖိုင်ဆိုင်ရာ ချို့ယွင်းချက် — {exc}")
     st.stop()
+   
