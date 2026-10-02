@@ -1,0 +1,44 @@
+{
+  "app": {
+    "name": "Shwe Khit AI Studio / Recap Voice Pro",
+    "version": "1.0.0",
+    "tagline": "မြန်မာစကားသံ Recap အလိုအလျောက် ဖန်တီးစနစ်",
+    "language": "my"
+  },
+  "ai": {
+    "provider": "gemini",
+    "gemini_api_key": "",
+    "gemini_model": "gemini-3.8-flash",
+    "openai_api_key": "",
+    "openai_model": "gpt-4o-mini",
+    "openai_base_url": "",
+    "temperature": 0.4,
+    "max_output_tokens": 8192,
+    "max_scene_chars": 220,
+    "translate_to_burmese": true,
+    "allow_offline_fallback": true
+  },
+  "transcript": {
+    "preferred_languages": ["my", "en", "en-US", "en-GB", "th", "hi", "zh-Hans"],
+    "auto_save_filename": "transcript.txt",
+    "dedupe_lines": true
+  },
+  "tts": {
+    "engine": "auto",
+    "voice": "Thiha (သီဟ)",
+    "quality": "standard",
+    "pitch": 5,
+    "speed": 43,
+    "volume": 16,
+    "output_dir": "outputs",
+    "file_prefix": "S",
+    "preview_text": "မင်္ဂလာပါ။ ရှေးခေတ် AI စတူဒီယိုမှ ကြိုဆိုပါတယ်။ ဒီအသံနမူနာကို နားထောင်ပြီး သင့်လိုအပ်ချက်နှင့် ကိုက်ညီမှု ရှိမရှိ စစ်ဆေးပေးပါ။",
+    "max_scene_chars": 600
+  },
+  "ui": {
+    "theme": "dark",
+    "accent_color": "#00E5A0",
+    "accent_secondary": "#7C5CFF",
+    "show_footer": true
+  }
+}
